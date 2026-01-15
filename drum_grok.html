@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Edu Drum Machine – 16 steps × 5 sounds</title>
+<style>
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #111;
+    color: #eee;
+    margin: 0;
+    padding: 20px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  h1 {
+    margin: 0.4em 0 0.8em;
+    color: #4fc;
+    text-shadow: 0 0 10px #0fa8;
+  }
+
+  .controls {
+    margin: 1.5em 0;
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+  }
+
+  button {
+    padding: 10px 20px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    background: #444;
+    color: white;
+    transition: all 0.12s;
+  }
+  button:hover { background: #666; }
+  button.active {
+    background: #e33;
+    box-shadow: 0 0 12px #f44;
+  }
+  #bpm {
+    width: 80px;
+    padding: 8px;
+    font-size: 1.2rem;
+    text-align: center;
+    background: #222;
+    color: #0f8;
+    border: 1px solid #444;
+    border-radius: 6px;
+  }
+
+  .sequencer {
+    display: grid;
+    grid-template-columns: 90px repeat(16, 54px);
+    gap: 4px 6px;
+    margin: 20px auto;
+    max-width: 1000px;
+  }
+
+  .row-label {
+    text-align: right;
+    font-weight: bold;
+    color: #8af;
+    padding-right: 12px;
+    font-size: 1.1rem;
+    align-self: center;
+  }
+
+  .step {
+    width: 54px;
+    height: 54px;
+    background: #222;
+    border: 1px solid #444;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.08s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .step.on {
+    background: #06f;
+    border-color: #4af;
+    box-shadow: 0 0 12px #06f8;
+  }
+
+  .step.playing {
+    transform: scale(1.18);
+    box-shadow: 0 0 22px #ff0, inset 0 0 12px #ff8;
+    z-index: 5;
+  }
+
+  .step.playing::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 30% 30%, #fff4 30%, transparent 70%);
+    pointer-events: none;
+  }
+
+  footer {
+    margin-top: auto;
+    padding: 2rem;
+    color: #777;
+    font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+
+<h1>Educational 16-step Drum Machine</h1>
+
+<div class="controls">
+  <div>
+    <label>BPM: </label>
+    <input type="number" id="bpm" value="120" min="60" max="240" step="1">
+  </div>
+  <button id="playBtn">Play ▶</button>
+  <button id="stopBtn">Stop ■</button>
+  <button id="clearBtn">Clear</button>
+</div>
+
+<div class="sequencer" id="grid"></div>
+
+<footer>
+  Click squares to place hits • Change BPM • Watch the playhead • Listen & learn sequencing!
+</footer>
+
+<script>
+// ────────────────────────────────────────────────
+const ROWS = [
+  { name: "Kick",   note: "C2",  color: "#f44" },
+  { name: "Snare",  note: "D2",  color: "#f84" },
+  { name: "Clap",   note: "E2",  color: "#fa4" },
+  { name: "Hi-hat", note: "F#3", color: "#8f8" },
+  { name: "Rim",    note: "A#2", color: "#4af" }
+];
+
+const STEPS = 16;
+let grid = [];
+let playing = false;
+let currentStep = 0;
+let intervalId = null;
+
+// ─── Audio ──────────────────────────────────────
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playDrumSound(typeIndex, velocity = 1) {
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  const row = ROWS[typeIndex];
+
+  // Very simplified drum approximations
+  if (row.name === "Kick") {
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(40, now + 0.08);
+    gain.gain.setValueAtTime(1.4 * velocity, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.20);
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(800, now);
+  }
+  else if (row.name === "Snare") {
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(80, now + 0.06);
+    gain.gain.setValueAtTime(0.9 * velocity, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(1800, now);
+    filter.Q.value = 1.2;
+  }
+  else if (row.name === "Clap") {
+    // very crude layered noise burst
+    gain.gain.setValueAtTime(0.7 * velocity, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(2200, now);
+    filter.Q.value = 0.8;
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(400, now);
+  }
+  else if (row.name.includes("hat")) {
+    osc.type = "square";
+    osc.frequency.setValueAtTime(9000, now);
+    gain.gain.setValueAtTime(0.45 * velocity, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+    filter.type = "highpass";
+    filter.frequency.setValueAtTime(5000, now);
+  }
+  else { // rim / side-stick like
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(600, now);
+    gain.gain.setValueAtTime(0.6 * velocity, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+  }
+
+  osc.start(now);
+  osc.stop(now + 0.4);
+}
+
+// ─── UI ─────────────────────────────────────────
+function createGrid() {
+  const container = document.getElementById("grid");
+  container.innerHTML = "";
+
+  ROWS.forEach((row, rowIndex) => {
+    // label
+    const label = document.createElement("div");
+    label.className = "row-label";
+    label.textContent = row.name;
+    label.style.color = row.color;
+    container.appendChild(label);
+
+    grid[rowIndex] = [];
+
+    for (let step = 0; step < STEPS; step++) {
+      const btn = document.createElement("div");
+      btn.className = "step";
+      btn.dataset.row = rowIndex;
+      btn.dataset.step = step;
+
+      btn.addEventListener("click", () => {
+        btn.classList.toggle("on");
+      });
+
+      container.appendChild(btn);
+      grid[rowIndex][step] = btn;
+    }
+  });
+}
+
+function highlightStep(step) {
+  // remove previous
+  document.querySelectorAll(".step.playing").forEach(el => el.classList.remove("playing"));
+
+  // highlight current
+  for (let r = 0; r < ROWS.length; r++) {
+    const cell = grid[r][step];
+    if (cell.classList.contains("on")) {
+      cell.classList.add("playing");
+      playDrumSound(r, 0.9 + Math.random()*0.2);
+    }
+  }
+}
+
+function startSequence() {
+  if (playing) return;
+  playing = true;
+
+  const bpm = Number(document.getElementById("bpm").value) || 120;
+  const intervalMs = (60 / bpm) * 1000 / 4; // 16th notes
+
+  currentStep = 0;
+  highlightStep(currentStep);
+
+  intervalId = setInterval(() => {
+    currentStep = (currentStep + 1) % STEPS;
+    highlightStep(currentStep);
+  }, intervalMs);
+
+  document.getElementById("playBtn").textContent = "Playing… ▶";
+}
+
+function stopSequence() {
+  if (!playing) return;
+  playing = false;
+  clearInterval(intervalId);
+  document.querySelectorAll(".step.playing").forEach(el => el.classList.remove("playing"));
+  document.getElementById("playBtn").textContent = "Play ▶";
+}
+
+function clearGrid() {
+  document.querySelectorAll(".step").forEach(el => el.classList.remove("on"));
+}
+
+// ─── Events ─────────────────────────────────────
+document.getElementById("playBtn").onclick = startSequence;
+document.getElementById("stopBtn").onclick = stopSequence;
+document.getElementById("clearBtn").onclick = clearGrid;
+
+document.getElementById("bpm").onchange = () => {
+  if (playing) {
+    stopSequence();
+    startSequence();
+  }
+};
+
+// Init
+createGrid();
+audioCtx.resume().catch(e=>console.log("Audio context resumed on interaction"));
+
+</script>
+</body>
+</html>
