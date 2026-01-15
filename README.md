@@ -2,8 +2,11 @@
 
 ## [Webserver](https://williamedwardhahn.github.io/AI26/)
 ### Demos
-[Drum Gemini](https://williamedwardhahn.github.io/AI26/drum_chatgpt.html
-)
+[Drum Gemini](https://williamedwardhahn.github.io/AI26/drum_gemini.html)
+
+[Drum ChatGPT](https://williamedwardhahn.github.io/AI26/drum_chatgpt.html)
+
+[Drum Grok](https://williamedwardhahn.github.io/AI26/drum_grok.html)
 
 ## [Syllabus](https://docs.google.com/document/d/12EPbtIx8nGIzQmvHGJVlQarJpNOZCYh8wc8M5FAVuE8/edit?usp=sharing)
 
