@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edu-Drum: The Logic of Rhythm</title>
+    <style>
+        :root {
+            --bg: #1a1a1a;
+            --panel: #2d2d2d;
+            --text: #e0e0e0;
+            --accent: #00ff88;
+            --kick: #ff4757;
+            --snare: #3742fa;
+            --hihat: #eccc68;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: var(--panel);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        /* The Sequencer Grid */
+        .grid {
+            display: grid;
+            grid-template-columns: 100px repeat(16, 1fr);
+            gap: 5px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+
+        .instrument-label {
+            display: flex;
+            align-items: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .step {
+            aspect-ratio: 1/1;
+            background: #444;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+
+        .step.active { background: #666; }
+        .step.selected-kick { background: var(--kick); box-shadow: 0 0 10px var(--kick); }
+        .step.selected-snare { background: var(--snare); box-shadow: 0 0 10px var(--snare); }
+        .step.selected-hihat { background: var(--hihat); box-shadow: 0 0 10px var(--hihat); }
+        .step.playing { border: 2px solid white; transform: scale(1.1); }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            padding: 20px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+        }
+
+        button {
+            padding: 10px 25px;
+            font-size: 1rem;
+            cursor: pointer;
+            background: var(--accent);
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            color: black;
+        }
+
+        button:hover { opacity: 0.9; }
+
+        .bpm-control {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Educational Section */
+        .edu-panel {
+            margin-top: 30px;
+            padding: 20px;
+            border-left: 4px solid var(--accent);
+            background: rgba(255,255,255,0.05);
+        }
+
+        .edu-panel h3 { margin-top: 0; color: var(--accent); }
+        
+        .info-card {
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Edu-Drum Machine</h1>
+            <p>Understand how 1s and 0s become a groove.</p>
+        </header>
+
+        <div class="grid" id="sequencer">
+            </div>
+
+        <div class="controls">
+            <button id="playBtn">▶ Play</button>
+            <div class="bpm-control">
+                <label>Tempo: <span id="bpmVal">120</span> BPM</label>
+                <input type="range" id="bpmInput" min="60" max="180" value="120">
+            </div>
+            <button id="clearBtn" style="background: #666; color: white;">Clear</button>
+        </div>
+
+        <div class="edu-panel">
+            <h3>How it works</h3>
+            <div id="edu-content">
+                <p>Click the <strong>Play</strong> button to start the clock. Each column represents a "step" in time. When the highlight hits a colored square, the computer executes a snippet of code to generate sound!</p>
+            </div>
+            <div class="info-card" id="kick-info">
+                <strong>The Kick Drum:</strong> Synthesized by a Sine wave that rapidly drops in pitch from 150Hz to 0.01Hz. This "thump" mimics the physical hit of a mallet on a large drum skin.
+            </div>
+            <div class="info-card" id="snare-info">
+                <strong>The Snare Drum:</strong> Uses "White Noise" (random frequencies) combined with a quick oscillating burst. It mimics the rattling metal wires (snares) on the bottom of a real drum.
+            </div>
+            <div class="info-card" id="hihat-info">
+                <strong>The Hi-Hat:</strong> Created using a High-Pass Filter on white noise. It cuts out all the low "heavy" frequencies, leaving only the sharp "ticking" sound.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const sequencer = document.getElementById('sequencer');
+        const playBtn = document.getElementById('playBtn');
+        const bpmInput = document.getElementById('bpmInput');
+        const bpmVal = document.getElementById('bpmVal');
+        const clearBtn = document.getElementById('clearBtn');
+
+        const instruments = [
+            { name: 'Kick', class: 'selected-kick', info: 'kick-info' },
+            { name: 'Snare', class: 'selected-snare', info: 'snare-info' },
+            { name: 'Hi-Hat', class: 'selected-hihat', info: 'hihat-info' }
+        ];
+
+        let isPlaying = false;
+        let currentStep = 0;
+        let nextStepTime = 0;
+        let tempo = 120;
+        const steps = 16;
+        const gridState = Array(3).fill().map(() => Array(16).fill(false));
+
+        // Create the UI Grid
+        instruments.forEach((inst, rowIdx) => {
+            const label = document.createElement('div');
+            label.className = 'instrument-label';
+            label.innerText = inst.name;
+            label.onmouseover = () => showInfo(inst.info);
+            sequencer.appendChild(label);
+
+            for (let colIdx = 0; colIdx < steps; colIdx++) {
+                const step = document.createElement('div');
+                step.className = 'step';
+                step.dataset.row = rowIdx;
+                step.dataset.col = colIdx;
+                step.onclick = () => {
+                    gridState[rowIdx][colIdx] = !gridState[rowIdx][colIdx];
+                    step.classList.toggle(inst.class);
+                };
+                sequencer.appendChild(step);
+            }
+        });
+
+        // --- Sound Synthesis Engines ---
+        
+        function playKick(time) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.frequency.setValueAtTime(150, time);
+            osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.5);
+            gain.gain.setValueAtTime(1, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
+
+            osc.start(time);
+            osc.stop(time + 0.5);
+        }
+
+        function playSnare(time) {
+            const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < noiseBuffer.length; i++) { output[i] = Math.random() * 2 - 1; }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = noiseBuffer;
+            
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.value = 1000;
+
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0.5, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+            noise.start(time);
+        }
+
+        function playHiHat(time) {
+            const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < noiseBuffer.length; i++) { output[i] = Math.random() * 2 - 1; }
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = noiseBuffer;
+
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.value = 7000;
+
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0.2, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+            noise.start(time);
+        }
+
+        // --- Logic & Timing ---
+
+        function scheduler() {
+            while (nextStepTime < audioCtx.currentTime + 0.1) {
+                scheduleStep(currentStep, nextStepTime);
+                advanceStep();
+            }
+            if (isPlaying) setTimeout(scheduler, 25);
+        }
+
+        function scheduleStep(step, time) {
+            // Visual feedback
+            const allSteps = document.querySelectorAll('.step');
+            allSteps.forEach(s => s.classList.remove('playing'));
+            
+            const columnSteps = document.querySelectorAll(`[data-col="${step}"]`);
+            columnSteps.forEach(s => s.classList.add('playing'));
+
+            // Audio Logic
+            if (gridState[0][step]) playKick(time);
+            if (gridState[1][step]) playSnare(time);
+            if (gridState[2][step]) playHiHat(time);
+        }
+
+        function advanceStep() {
+            const secondsPerBeat = 60.0 / tempo / 4; // 16th notes
+            nextStepTime += secondsPerBeat;
+            currentStep = (currentStep + 1) % steps;
+        }
+
+        playBtn.onclick = () => {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playBtn.innerText = 'Stop';
+                nextStepTime = audioCtx.currentTime;
+                scheduler();
+            } else {
+                playBtn.innerText = '▶ Play';
+            }
+        };
+
+        bpmInput.oninput = () => {
+            tempo = bpmInput.value;
+            bpmVal.innerText = tempo;
+        };
+
+        clearBtn.onclick = () => {
+            gridState.forEach(row => row.fill(false));
+            document.querySelectorAll('.step').forEach(s => {
+                s.className = 'step';
+            });
+        };
+
+        function showInfo(id) {
+            document.querySelectorAll('.info-card').forEach(card => card.style.display = 'none');
+            document.getElementById(id).style.display = 'block';
+        }
+    </script>
+</body>
+</html>
