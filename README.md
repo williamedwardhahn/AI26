@@ -9,7 +9,9 @@
 ## Readings:
 
 [NetLogo](https://en.wikipedia.org/wiki/NetLogo)
+
 [Agent-based_model](https://en.wikipedia.org/wiki/Agent-based_model)
+
 [Agent-oriented_programming](https://en.wikipedia.org/wiki/Agent-oriented_programming)
 
 
